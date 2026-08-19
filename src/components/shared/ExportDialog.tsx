@@ -9,8 +9,9 @@ import { useUIStore } from '@/store/ui-store';
 import { exportToPNG, copyPNGToClipboard } from '@/lib/export/png';
 import { downloadSVG } from '@/lib/export/svg';
 import { downloadOfflineHtml } from '@/lib/export/offline';
+import { downloadXML } from '@/lib/export/xml';
 
-type Format = 'png' | 'svg' | 'html';
+type Format = 'png' | 'svg' | 'html' | 'xml';
 
 export function ExportDialog({ onClose }: { onClose: () => void }) {
   const elements = useCanvasStore((s) => s.elements);
@@ -58,7 +59,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
           },
           `drawer-${stamp}.svg`
         );
-      } else {
+      } else if (format === 'html') {
         await downloadOfflineHtml(
           {
             elements: exported,
@@ -66,6 +67,14 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
             title: `Drawer board — ${stamp}`,
           },
           `drawer-${stamp}.html`
+        );
+      } else {
+        await downloadXML(
+          {
+            elements: exported,
+            background: withBackground ? canvasBackground : 'transparent',
+          },
+          `drawer-${stamp}.xml`
         );
       }
       onClose();
@@ -108,7 +117,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
 
         <Section label="Format">
           <div className="flex gap-2">
-            {(['png', 'svg', 'html'] as Format[]).map((f) => (
+            {(['png', 'svg', 'html', 'xml'] as Format[]).map((f) => (
               <Choice key={f} active={format === f} onClick={() => setFormat(f)}>
                 {f.toUpperCase()}
               </Choice>
@@ -118,6 +127,12 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
             <p className="mt-2 text-[11px] text-zinc-500">
               One self-contained file. Open it offline in any browser to pan and
               zoom your board; the scene data rides along inside it.
+            </p>
+          )}
+          {format === 'xml' && (
+            <p className="mt-2 text-[11px] text-zinc-500">
+              Machine-readable XML containing every element&apos;s properties.
+              Useful for programmatic import or archiving.
             </p>
           )}
         </Section>

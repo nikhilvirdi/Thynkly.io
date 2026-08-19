@@ -129,10 +129,10 @@ export function Canvas() {
   // pointerup, so the note can still be dragged by its body.
   const stickyClickRef = useRef<{ id: string; x: number; y: number } | null>(null);
   const resizeHandleRef = useRef<ResizeHandle | null>(null);
-  const resizeStartBounds = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+  const resizeStartBounds = useRef<{ x: number; y: number; width: number; height: number; fontSize?: number } | null>(null);
   const resizeGroupStartBounds = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   const activeGroupBounds = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
-  const resizeElementStartBoundsRef = useRef<Record<string, { x: number; y: number; width: number; height: number; type: string; controlPoints?: { x: number; y: number }[] }>>({});
+  const resizeElementStartBoundsRef = useRef<Record<string, { x: number; y: number; width: number; height: number; type: string; fontSize?: number; controlPoints?: { x: number; y: number }[] }>>({});
   const resizeElementIdRef = useRef<string | null>(null);
   const rotateStartAngle = useRef<number>(0);
   const rotateCenter = useRef<Point>({ x: 0, y: 0 });
@@ -1113,10 +1113,13 @@ export function Canvas() {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
+      let imageFound = false;
+
       if (e.clipboardData && e.clipboardData.items) {
         const items = Array.from(e.clipboardData.items);
         for (const item of items) {
           if (item.type.indexOf('image') !== -1) {
+            imageFound = true;
             e.preventDefault();
             const file = item.getAsFile();
             if (file) {
@@ -1136,6 +1139,12 @@ export function Canvas() {
             break;
           }
         }
+      }
+
+      if (!imageFound) {
+        e.preventDefault();
+        const world = lastPointerWorldPos.current || undefined;
+        useCanvasStore.getState().paste(world);
       }
     };
 
@@ -1481,7 +1490,7 @@ export function Canvas() {
         zIndex: Date.now(),
         style: { ...currentStyle },
         text: '',
-        fontSize: 18,
+        fontSize: 60,
         fontFamily: 'Inter, sans-serif',
         color: currentStyle.stroke,
       };
@@ -1571,8 +1580,8 @@ export function Canvas() {
         if (tool === 'select') {
            setMode('dragging');
            return;
-        } else if (tool === ShapeType.CONNECTOR || tool === ShapeType.ARROW) {
-           // Connectors must be allowed to start on existing elements!
+        } else if (tool === ShapeType.CONNECTOR || tool === ShapeType.ARROW || tool === ShapeType.LINE) {
+           // Connectors/arrows/lines must be allowed to start on existing elements!
            // Fall through to the connector drawing logic below.
         } else {
            // We clicked an element while holding a shape tool. We just selected it, but we don't start drawing.
@@ -1592,8 +1601,8 @@ export function Canvas() {
     }
     // ─── END UNIVERSAL CLICK-TO-SELECT ───────────────────────────────────
 
-    // Connector drawing
-    if (tool === ShapeType.CONNECTOR || tool === ShapeType.ARROW) {
+    // Connector / Arrow / Line drawing
+    if (tool === ShapeType.CONNECTOR || tool === ShapeType.ARROW || tool === ShapeType.LINE) {
       const id = uuidv4();
       const manager = new ConnectorManager();
       const nearest = manager.findNearestAnchor(world.x, world.y, elements);
@@ -1616,7 +1625,9 @@ export function Canvas() {
         endY: world.y,
         startElementId: nearest ? nearest.elementId : null,
         startAnchorPoint: nearest ? nearest.anchorPoint : undefined,
-        routingMode: 'curved'
+        // LINE tool draws a straight connector with no arrowheads
+        routingMode: tool === ShapeType.LINE ? 'straight' : 'curved',
+        ...(tool === ShapeType.LINE ? { endArrowhead: null, startArrowhead: null } : {}),
       };
       
       addElement(newConnector as unknown as WhiteboardElement);
@@ -1795,8 +1806,14 @@ export function Canvas() {
             const newY = newGb.y + (startEl.y - startGb.y) * scaleY;
             const newW = startEl.width * scaleX;
             const newH = startEl.height * scaleY;
-            const updates: Partial<WhiteboardElement> & { controlPoints?: { x: number; y: number }[] } = { x: newX, y: newY, width: newW, height: newH };
+            const updates: Partial<WhiteboardElement> & { fontSize?: number; controlPoints?: { x: number; y: number }[] } = { x: newX, y: newY, width: newW, height: newH };
             
+            if (startEl.type === ShapeType.TEXT && startEl.height > 0) {
+              const scaleFactor = newH / startEl.height;
+              const startFontSize = startEl.fontSize ?? 16;
+              updates.fontSize = Math.max(8, Math.round(startFontSize * scaleFactor));
+            }
+
             if (startEl.type === ShapeType.CONNECTOR && startEl.controlPoints) {
               updates.controlPoints = startEl.controlPoints.map((cp: Point) => ({
                 x: newGb.x + (cp.x - startGb.x) * scaleX,
@@ -1816,7 +1833,27 @@ export function Canvas() {
 
         const preserveRatio = e.shiftKey || (el.type === ShapeType.IMAGE && (el as ImageElement).lockAspectRatio) || el.type === ShapeType.ICON;
         const newBounds = calcResizedBounds(handle, el.x, el.y, el.width, el.height, wdx, wdy, preserveRatio);
-        updateElement(elId, newBounds);
+
+        if (el.type === ShapeType.TEXT) {
+          const start = resizeStartBounds.current;
+          const startHeight = start?.height || el.height;
+          const startFontSize = start?.fontSize ?? (el as TextElement).fontSize ?? 16;
+          if (startHeight > 0) {
+            const scaleFactor = newBounds.height / startHeight;
+            const newFontSize = Math.max(8, Math.round(startFontSize * scaleFactor));
+            updateElement(elId, { ...newBounds, fontSize: newFontSize });
+            break;
+          }
+        }
+
+        if (el.type === ShapeType.TEXT && resizeStartBounds.current?.fontSize !== undefined) {
+  const start = resizeStartBounds.current;
+  const scaleFactor = newBounds.height / start.height;
+  const newFontSize = Math.max(8, Math.round((start.fontSize ?? 16) * scaleFactor));
+  updateElement(elId, { ...newBounds, fontSize: newFontSize });
+} else {
+  updateElement(elId, newBounds);
+}
         break;
       }
 
@@ -2273,7 +2310,7 @@ export function Canvas() {
             zIndex: el.zIndex + 0.5,
             style: { ...currentStyle },
             text: '',
-            fontSize: 18,
+            fontSize: 60,
             fontFamily: FONT_FAMILIES[0].value,
             color: currentStyle.stroke,
             textAlign: 'center',
@@ -2293,13 +2330,13 @@ export function Canvas() {
         x: world.x,
         y: world.y,
         width: 0,
-        height: 18 * 1.4,
+        height: 60 * 1.4,
         rotation: 0,
         locked: false,
         zIndex: Date.now(),
         style: { ...currentStyle },
         text: '',
-        fontSize: 18,
+        fontSize: 60,
         fontFamily: FONT_FAMILIES[0].value,
         color: currentStyle.stroke,
         textAlign: 'left',
@@ -2676,12 +2713,12 @@ export function Canvas() {
             
             if (selectedArray.length === 1) {
               const el = selectedArray[0]!;
-              resizeStartBounds.current = { x: el.x, y: el.y, width: el.width, height: el.height };
+              resizeStartBounds.current = { x: el.x, y: el.y, width: el.width, height: el.height, fontSize: el.type === ShapeType.TEXT ? (el as TextElement).fontSize : undefined };
               resizeElementIdRef.current = el.id;
             } else {
               resizeElementIdRef.current = 'group';
               let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-              const startBounds: Record<string, { x: number; y: number; width: number; height: number; type: string; controlPoints?: { x: number; y: number }[] }> = {};
+              const startBounds: Record<string, { x: number; y: number; width: number; height: number; type: string; fontSize?: number; controlPoints?: { x: number; y: number }[] }> = {};
               selectedArray.forEach(el => {
                 minX = Math.min(minX, el.x);
                 minY = Math.min(minY, el.y);
@@ -2693,6 +2730,7 @@ export function Canvas() {
                   width: el.width, 
                   height: el.height, 
                   type: el.type, 
+                  fontSize: el.type === ShapeType.TEXT ? (el as TextElement).fontSize : undefined,
                   controlPoints: el.type === ShapeType.CONNECTOR ? (el as ConnectorElement).controlPoints : undefined 
                 };
               });
@@ -2781,8 +2819,13 @@ function EraserCursor({ size }: { size: number }) {
     // mousemove, so the ring was invisible on exactly the devices where the
     // canvas cursor is set to 'none' and there is no other feedback at all.
     const handleMove = (e: PointerEvent) => {
-      el.style.transform = `translate(${e.clientX - size / 2}px, ${e.clientY - size / 2}px)`;
-      el.style.opacity = '1';
+      const target = e.target as Element;
+      if (target && (target.tagName === 'CANVAS' || target.closest('.canvas-container'))) {
+        el.style.transform = `translate(${e.clientX - size / 2}px, ${e.clientY - size / 2}px)`;
+        el.style.opacity = '1';
+      } else {
+        el.style.opacity = '0';
+      }
     };
     // On touch the ring has no hover state to live in, so it fades with the lift.
     const handleUp = (e: PointerEvent) => {
@@ -2823,3 +2866,8 @@ function EraserCursor({ size }: { size: number }) {
     />
   );
 }
+
+
+
+
+

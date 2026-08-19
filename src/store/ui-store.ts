@@ -19,10 +19,13 @@ interface UIState {
   dialog: "help" | "export" | null;
   /** 'contain' takes only what the loop encloses; 'intersect' also takes what it cuts. */
   lassoMode: "contain" | "intersect";
+  /** Which edge the toolbar is docked to. */
+  toolbarDock: "left" | "top" | "right" | "bottom";
 
   // Actions
   setDialog: (dialog: UIState["dialog"]) => void;
   setLassoMode: (mode: UIState["lassoMode"]) => void;
+  setToolbarDock: (dock: UIState["toolbarDock"]) => void;
   togglePanel: (panel: keyof UIState["panels"]) => void;
   updateGrid: (settings: Partial<GridSettings>) => void;
   updateSnap: (settings: Partial<SnapSettings>) => void;
@@ -67,6 +70,7 @@ export const useUIStore = create<UIState>()(
 
       dialog: null,
       lassoMode: "contain",
+      toolbarDock: "left",
 
       setDialog: (dialog) =>
         set((state) => {
@@ -76,6 +80,11 @@ export const useUIStore = create<UIState>()(
       setLassoMode: (mode) =>
         set((state) => {
           state.lassoMode = mode;
+        }),
+
+      setToolbarDock: (dock) =>
+        set((state) => {
+          state.toolbarDock = dock;
         }),
 
       togglePanel: (panel) =>
@@ -140,6 +149,7 @@ export const useUIStore = create<UIState>()(
       partialize: (state) => ({
         theme: state.theme,
         currentStyle: state.currentStyle,
+        toolbarDock: state.toolbarDock,
       }),
     }
   ),

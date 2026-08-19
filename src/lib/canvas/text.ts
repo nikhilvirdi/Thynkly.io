@@ -13,9 +13,11 @@ export const LINE_HEIGHT = 1.4;
 export const CONTAINER_PADDING = 8;
 
 export const FONT_FAMILIES = [
-  { label: 'Sans', value: 'Inter, system-ui, sans-serif' },
-  { label: 'Serif', value: 'Georgia, serif' },
-  { label: 'Mono', value: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
+  { label: 'Sans',    value: 'Inter, system-ui, sans-serif' },
+  { label: 'Serif',   value: 'Georgia, serif' },
+  { label: 'Mono',    value: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
+  { label: 'Script',  value: "'Comic Sans MS', 'Chalkboard SE', cursive" },
+  { label: 'Narrow',  value: "'Arial Narrow', 'Helvetica Neue Condensed', sans-serif" },
 ] as const;
 
 // One reusable context; creating a canvas per measurement is measurably slow
@@ -29,8 +31,12 @@ function getMeasureContext(): CanvasRenderingContext2D | null {
   return measureCtx;
 }
 
-export const fontString = (fontSize: number, fontFamily: string) =>
-  `${fontSize}px ${fontFamily}`;
+export const fontString = (fontSize: number, fontFamily: string, bold?: boolean, italic?: boolean) =>
+  `${italic ? 'italic ' : ''}${bold ? 'bold ' : ''}${fontSize}px ${fontFamily}`;
+
+/** Build the full CSS font string for a TextElement, respecting bold/italic. */
+export const textFontString = (el: TextElement): string =>
+  fontString(el.fontSize || 18, el.fontFamily || FONT_FAMILIES[0].value, el.bold, el.italic);
 
 export function measureLine(text: string, fontSize: number, fontFamily: string): number {
   const ctx = getMeasureContext();
@@ -105,7 +111,9 @@ export function layoutText(
 ): { lines: string[]; width: number; height: number; lineHeight: number } {
   const fontSize = el.fontSize || 18;
   const fontFamily = el.fontFamily || FONT_FAMILIES[0].value;
-  const lineHeight = fontSize * LINE_HEIGHT;
+  // Use the element's lineHeight multiplier if set, otherwise the global constant.
+  const lineHeightMultiplier = el.lineHeight ?? LINE_HEIGHT;
+  const lineHeight = fontSize * lineHeightMultiplier;
 
   const lines = container
     ? wrapText(el.text || '', Math.abs(container.width) - CONTAINER_PADDING * 2, fontSize, fontFamily)

@@ -277,13 +277,13 @@ export function PropertiesPanel() {
 
               <div className="flex flex-col gap-1">
                 <span className="text-[10px] text-zinc-500 dark:text-zinc-400">Font</span>
-                <div className="flex gap-2">
+                <div className="grid grid-cols-3 gap-1">
                   {FONT_FAMILIES.map((f) => (
                     <button
                       key={f.value}
                       onClick={() => handleTextChange(element as TextElement, { fontFamily: f.value })}
                       style={{ fontFamily: f.value }}
-                      className={`flex-1 px-2 py-1 text-xs rounded border ${
+                      className={`px-2 py-1 text-xs rounded border ${
                         ((element as TextElement).fontFamily || FONT_FAMILIES[0].value) === f.value
                           ? 'border-foreground bg-foreground text-background font-medium'
                           : 'border-zinc-300 dark:border-zinc-700 text-zinc-500 hover:border-zinc-500'
@@ -293,6 +293,47 @@ export function PropertiesPanel() {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Bold / Italic */}
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] text-zinc-500 dark:text-zinc-400">Style</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleTextChange(element as TextElement, { bold: !(element as TextElement).bold })}
+                    className={`flex-1 px-2 py-1 text-xs rounded border font-bold ${
+                      (element as TextElement).bold
+                        ? 'border-foreground bg-foreground text-background'
+                        : 'border-zinc-300 dark:border-zinc-700 text-zinc-500 hover:border-zinc-500'
+                    }`}
+                  >
+                    B
+                  </button>
+                  <button
+                    onClick={() => handleTextChange(element as TextElement, { italic: !(element as TextElement).italic })}
+                    className={`flex-1 px-2 py-1 text-xs rounded border italic ${
+                      (element as TextElement).italic
+                        ? 'border-foreground bg-foreground text-background'
+                        : 'border-zinc-300 dark:border-zinc-700 text-zinc-500 hover:border-zinc-500'
+                    }`}
+                  >
+                    I
+                  </button>
+                </div>
+              </div>
+
+              {/* Line Height */}
+              <div className="flex flex-col gap-1">
+                <div className="flex justify-between text-[10px] text-zinc-500 dark:text-zinc-400">
+                  <span>Line Height</span>
+                  <span>{((element as TextElement).lineHeight ?? 1.4).toFixed(1)}×</span>
+                </div>
+                <input
+                  type="range" min="1.0" max="3.0" step="0.1"
+                  value={(element as TextElement).lineHeight ?? 1.4}
+                  onChange={(e) => handleTextChange(element as TextElement, { lineHeight: parseFloat(e.target.value) })}
+                  className="accent-foreground"
+                />
               </div>
 
               {!(element as TextElement).containerId && (

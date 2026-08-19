@@ -20,12 +20,11 @@ export async function getIconBitmap(element: IconElement): Promise<ImageBitmap |
     const Component = await loadIconComponent(element.iconName, element.iconLibrary);
     if (!Component) return null;
 
-    // Render the Lucide icon to an SVG string
+    // Render the Material Symbols icon to an SVG string
     const svgMarkup = renderToStaticMarkup(
       React.createElement(Component, {
         color: color,
         size: element.width,
-        strokeWidth: element.style?.strokeWidth || 2,
       })
     );
 

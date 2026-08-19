@@ -6,9 +6,8 @@ import { useUIStore } from '@/store/ui-store';
 import { useCanvasStore } from '@/store/canvas-store';
 import {
   Menu, FolderOpen, Save, Image as ImageIcon, Users,
-  Command, Search, HelpCircle, Trash2, Code, Share2,
-  MessageSquare, LogIn, Settings, Sun, Moon, Monitor,
-  ChevronRight, Triangle
+  Command, Search, HelpCircle, Trash2, LogIn, Settings,
+  Sun, Moon, Monitor, ChevronRight
 } from 'lucide-react';
 import { exportToJSON, pickAndParseScene } from '@/lib/export/json';
 
@@ -111,15 +110,6 @@ export function MainMenu() {
         { icon: HelpCircle, label: 'Help', shortcut: '?', onClick: () => { setDialog('help'); setIsOpen(false); } },
         { icon: Trash2, label: 'Reset the canvas', onClick: handleResetCanvas, destructive: true },
       ]
-    },
-    {
-      label: 'COMMUNITY',
-      items: [
-        { icon: Triangle, label: 'Drawer+' },
-        { icon: Code, label: 'GitHub' },
-        { icon: Share2, label: 'Follow us' },
-        { icon: MessageSquare, label: 'Discord chat' },
-      ]
     }
   ];
 
@@ -185,13 +175,15 @@ export function MainMenu() {
               <div className="px-5 mb-2 text-[10px] font-bold tracking-widest text-zinc-500 mt-2">
                 ACCOUNT
               </div>
-              <div className="px-5 mb-4">
-                <button className="w-full relative group overflow-hidden rounded-full p-[1px]">
-                  <div className="absolute inset-0 bg-gradient-to-r from-[#7C3AED] to-[#2563EB] opacity-70 group-hover:opacity-100 transition-opacity duration-300 blur-sm" />
-                  <div className="relative flex items-center justify-center gap-2 bg-gradient-to-r from-[#7C3AED] to-[#2563EB] text-white rounded-full py-2.5 px-4 shadow-[0_0_15px_rgba(124,58,237,0.3)] group-hover:shadow-[0_0_20px_rgba(124,58,237,0.5)] transition-shadow">
-                    <LogIn size={16} />
-                    <span className="text-[14px] font-bold">Sign up</span>
+              <div className="px-2 mb-4">
+                <button className="group relative flex items-center gap-3 w-full px-3 py-2.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-white/5 transition-all duration-200">
+                  <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-to-b from-[#7C3AED] to-[#2563EB] scale-y-0 group-hover:scale-y-100 origin-left transition-transform duration-200 rounded-r-full" />
+                  <div className="p-1.5 rounded-md bg-gradient-to-br from-[#7C3AED]/20 to-[#2563EB]/20">
+                    <LogIn size={16} className="text-[#9d5cff]" />
                   </div>
+                  <span className="text-[14px] font-semibold text-zinc-700 dark:text-zinc-300 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors">
+                    Sign up
+                  </span>
                 </button>
               </div>
 
@@ -234,12 +226,6 @@ export function MainMenu() {
                   </div>
                 </div>
 
-                <div className="px-2 mt-2">
-                  <button className="flex items-center justify-between w-full px-3 py-2 bg-black/20 border border-white/10 rounded-xl hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors">
-                    <span className="text-[14px] font-medium text-zinc-700 dark:text-zinc-300">English</span>
-                    <Triangle size={10} className="text-zinc-500 rotate-180" />
-                  </button>
-                </div>
 
                 <div className="flex flex-col mt-4 px-3 gap-3">
                   <span className={`text-[14px] font-medium ${resolvedTheme === 'dark' ? 'text-zinc-300' : 'text-zinc-600'}`}>Canvas background</span>
@@ -283,3 +269,5 @@ export function MainMenu() {
     </div>
   );
 }
+
+

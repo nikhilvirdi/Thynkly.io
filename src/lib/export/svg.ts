@@ -365,7 +365,6 @@ async function appendIcon(group: SVGGElement, el: IconElement) {
     React.createElement(Component, {
       color: el.style?.stroke || el.color,
       size: el.width,
-      strokeWidth: el.style?.strokeWidth || 2,
     })
   );
 

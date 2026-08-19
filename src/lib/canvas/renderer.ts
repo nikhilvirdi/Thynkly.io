@@ -6,7 +6,7 @@ import { ImageHandler } from './image-handler';
 import { ConnectorManager } from './connectors';
 import { RoughRenderer } from './rough-renderer';
 import { drawIconElement, getIconBitmapSync, getIconBitmap } from './icon-renderer';
-import { layoutText, measureLine, fontString, FONT_FAMILIES } from './text';
+import { layoutText, measureLine, fontString, textFontString, FONT_FAMILIES } from './text';
 import { renderSticky } from './sticky';
 
 // These were re-allocated on every frame — 240 throwaway objects a second at
@@ -208,7 +208,7 @@ const renderText = (
   if (lines.length === 0) return;
 
   const fontSize = el.fontSize || 18;
-  ctx.font = fontString(fontSize, el.fontFamily || FONT_FAMILIES[0].value);
+  ctx.font = textFontString(el);
   ctx.fillStyle = el.color || el.style.stroke;
   ctx.globalAlpha = el.style.opacity ?? 1;
   ctx.textBaseline = 'top';

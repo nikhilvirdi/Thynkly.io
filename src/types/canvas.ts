@@ -92,6 +92,10 @@ export interface TextElement extends BaseElement {
   fontFamily: string;
   color: string;
   textAlign?: 'left' | 'center' | 'right';
+  bold?: boolean;
+  italic?: boolean;
+  /** Line-height multiplier. Defaults to LINE_HEIGHT (1.4) when absent. */
+  lineHeight?: number;
   /**
    * Set when this text is a label bound inside a shape. Bound text is drawn
    * centred in its container and is not independently selectable — you select
@@ -145,7 +149,7 @@ export interface ConnectorElement extends BaseElement {
 export interface IconElement extends BaseElement {
   type: ShapeType.ICON;
   iconName: string;
-  iconLibrary: 'lucide' | 'tabler';
+  iconLibrary: 'material-symbols';
   color: string;
 }
 

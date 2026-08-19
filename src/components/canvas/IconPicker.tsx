@@ -1,9 +1,55 @@
-import React, { useState, useEffect, useMemo } from 'react';
+'use client';
+
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useCanvasStore } from '@/store/canvas-store';
-import { Search, X } from 'lucide-react';
+import { Shapes, Search, X, GripHorizontal } from 'lucide-react';
 import { searchIcons } from '@/lib/icons/search';
 import { ICON_CATEGORIES } from '@/lib/icons/registry';
-import * as LucideIcons from 'lucide-react';
+import { loadIconComponent } from '@/lib/icons/loader';
+import { FixedSizeList as List } from 'react-window';
+import AutoSizer from 'react-virtualized-auto-sizer';
+import type { IconMeta } from '@/lib/icons/types';
+
+type IconComponent = React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+
+const IconRow = React.memo(({ index, style, data }: { index: number; style: React.CSSProperties; data: { results: IconMeta[]; loadedIcons: Record<string, IconComponent>; addIconElement: (n: string, l: "material-symbols") => void; COLUMN_COUNT: number } }) => {
+  const { results, loadedIcons, addIconElement, COLUMN_COUNT } = data;
+  const startIndex = index * COLUMN_COUNT;
+  const rowItems = results.slice(startIndex, startIndex + COLUMN_COUNT);
+
+  return (
+    <div style={style} className="grid grid-cols-3 gap-1.5 pr-1.5 pb-1.5">
+      {rowItems.map((meta: IconMeta) => {
+        const cacheKey = `${meta.library}:${meta.name}`;
+        const IconComp = loadedIcons[cacheKey];
+
+        return (
+          <button
+            key={meta.name}
+            id={`icon-item-${meta.slug}`}
+            className="flex flex-col items-center justify-center p-2 rounded-lg bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-700/40 hover:bg-zinc-100 dark:hover:bg-zinc-700/60 hover:border-zinc-300 dark:hover:border-zinc-600 hover:scale-105 active:scale-95 transition-all group"
+            onClick={() => addIconElement(meta.name, meta.library)}
+            title={meta.name}
+          >
+            {IconComp ? (
+              <IconComp
+                className="text-zinc-600 dark:text-zinc-300 group-hover:text-zinc-900 dark:group-hover:text-white mb-1 transition-colors"
+                style={{ width: 22, height: 22 }}
+              />
+            ) : (
+              <div className="w-[22px] h-[22px] mb-1 rounded bg-zinc-200 dark:bg-zinc-700 animate-pulse" />
+            )}
+            <span className="text-[9px] text-zinc-400 dark:text-zinc-500 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 truncate w-full text-center leading-tight transition-colors">
+              {meta.name}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+});
+IconRow.displayName = 'IconRow';
 
 export function IconPicker() {
   const isOpen = useCanvasStore((state) => state.iconPickerOpen);
@@ -12,98 +58,166 @@ export function IconPicker() {
 
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
+  const [loadedIcons, setLoadedIcons] = useState<Record<string, IconComponent>>({});
+  const searchRef = useRef<HTMLInputElement>(null);
 
-  // Reset when opened
+  // Reset state and focus search when opened
   useEffect(() => {
     if (isOpen) {
       setQuery('');
       setCategory('All');
+      setTimeout(() => searchRef.current?.focus(), 80);
     }
   }, [isOpen]);
 
   const results = useMemo(() => searchIcons(query, category), [query, category]);
 
+  // Async-load all visible icon components into state
+  useEffect(() => {
+    if (!isOpen || results.length === 0) return;
+
+    let cancelled = false;
+    const toLoad = results.filter(
+      (meta) => !loadedIcons[`${meta.library}:${meta.name}`]
+    );
+    if (toLoad.length === 0) return;
+
+    Promise.allSettled(
+      toLoad.map(async (meta) => {
+        const comp = await loadIconComponent(meta.name, meta.library);
+        return { key: `${meta.library}:${meta.name}`, comp };
+      })
+    ).then((settled) => {
+      if (cancelled) return;
+      const newEntries: Record<string, IconComponent> = {};
+      for (const result of settled) {
+        if (result.status === 'fulfilled' && result.value.comp) {
+          newEntries[result.value.key] = result.value.comp;
+        }
+      }
+      if (Object.keys(newEntries).length > 0) {
+        setLoadedIcons((prev) => ({ ...prev, ...newEntries }));
+      }
+    });
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, results]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div 
-        className="w-full max-w-2xl h-[70vh] flex flex-col bg-slate-900/95 border border-slate-700/50 rounded-2xl shadow-2xl overflow-hidden backdrop-blur-xl"
-        onClick={(e) => e.stopPropagation()}
+    <AnimatePresence>
+      <motion.div
+        key="icon-picker-panel"
+        drag
+        dragMomentum={false}
+        initial={{ opacity: 0, scale: 0.95, x: -8 }}
+        animate={{ opacity: 1, scale: 1, x: 0 }}
+        exit={{ opacity: 0, scale: 0.95, x: -8 }}
+        transition={{ duration: 0.15 }}
+        // Initial position: left side, offset below the Layers panel.
+        // Both are freely draggable after open so this is just the default slot.
+        className="fixed left-4 md:left-20 top-[340px] w-56 md:w-64 max-w-[calc(100vw-32px)] bg-white/90 dark:bg-[#1a1a1e]/90 backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl flex flex-col z-30 pointer-events-auto"
+        style={{ maxHeight: 'calc(var(--app-height, 100vh) - 360px)', minHeight: '280px' }}
       >
-        {/* Header */}
-        <div className="flex items-center px-4 py-3 border-b border-slate-800">
-          <div className="flex-1 flex items-center bg-slate-800/50 rounded-lg px-3 py-2 border border-slate-700/50 focus-within:border-blue-500/50 transition-colors">
-            <Search className="w-5 h-5 text-slate-400 mr-2" />
+        {/* ── Header (drag handle) ── */}
+        <div className="flex items-center justify-between px-3 py-2.5 border-b border-zinc-200 dark:border-zinc-800 cursor-grab active:cursor-grabbing shrink-0">
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <GripHorizontal size={14} className="text-zinc-400 dark:text-zinc-500" />
+            <Shapes size={15} className="text-zinc-600 dark:text-zinc-300" />
+            Icons
+          </h3>
+          <button
+            id="icon-picker-close"
+            onClick={() => setOpen(false)}
+            className="text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-200 transition-colors"
+            title="Close icon picker"
+          >
+            <X size={15} />
+          </button>
+        </div>
+
+        {/* ── Search bar ── */}
+        <div className="px-3 py-2 border-b border-zinc-100 dark:border-zinc-800/60 shrink-0">
+          <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-800/60 rounded-lg px-2.5 py-1.5 border border-zinc-200 dark:border-zinc-700/50 focus-within:border-zinc-400 dark:focus-within:border-zinc-500 transition-colors">
+            <Search size={13} className="text-zinc-400 dark:text-zinc-500 shrink-0" />
             <input
-              autoFocus
+              ref={searchRef}
               type="text"
-              placeholder="Search icons..."
-              className="bg-transparent border-none outline-none text-slate-200 placeholder-slate-500 flex-1 text-sm"
+              placeholder="Search icons…"
+              className="bg-transparent border-none outline-none text-zinc-800 dark:text-zinc-200 placeholder-zinc-400 dark:placeholder-zinc-600 flex-1 text-xs min-w-0"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
             {query && (
-              <button onClick={() => setQuery('')} className="text-slate-400 hover:text-white">
-                <X className="w-4 h-4" />
+              <button
+                onClick={() => setQuery('')}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 shrink-0"
+              >
+                <X size={12} />
               </button>
             )}
           </div>
-          <button 
-            onClick={() => setOpen(false)}
-            className="ml-4 p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
-        {/* Categories */}
-        <div className="px-4 py-2 flex items-center gap-2 overflow-x-auto hide-scrollbar border-b border-slate-800/50">
-          {ICON_CATEGORIES.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setCategory(cat)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
-                category === cat 
-                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' 
-                  : 'bg-slate-800 text-slate-400 border border-transparent hover:bg-slate-700 hover:text-slate-200'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
+        {/* ── Scrollable body: categories + grid ── */}
+        <div className="flex-1 min-h-0 flex flex-col">
 
-        {/* Grid */}
-        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-          {results.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-slate-500">
-              <Search className="w-12 h-12 mb-4 opacity-20" />
-              <p>No icons found for &quot;{query}&quot;</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
-              {results.map((meta) => {
-                const IconComponent = (LucideIcons as unknown as Record<string, React.ElementType>)[meta.name];
-                if (!IconComponent) return null;
+          {/* Category list — vertical sidebar-style rows */}
+          <div className="px-2 pt-2 pb-1 flex flex-col gap-0.5 border-b border-zinc-100 dark:border-zinc-800/50 max-h-32 overflow-y-auto custom-scrollbar shrink-0">
+            {ICON_CATEGORIES.map((cat) => {
+              const isActive = category === cat;
+              return (
+                <button
+                  key={cat}
+                  id={`icon-cat-${cat.toLowerCase()}`}
+                  onClick={() => setCategory(cat)}
+                  className={`w-full text-left px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                    isActive
+                      ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
+                      : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-800 dark:hover:text-zinc-200'
+                  }`}
+                >
+                  {cat}
+                </button>
+              );
+            })}
+          </div>
 
-                return (
-                  <button
-                    key={meta.name}
-                    className="flex flex-col items-center justify-center p-3 rounded-xl bg-slate-800/30 border border-slate-700/30 hover:bg-slate-700 hover:border-slate-500/50 hover:scale-105 transition-all group"
-                    onClick={() => addIconElement(meta.name, meta.library)}
-                  >
-                    <IconComponent className="w-8 h-8 text-slate-300 group-hover:text-white mb-2" strokeWidth={1.5} />
-                    <span className="text-[10px] text-slate-500 group-hover:text-slate-300 truncate w-full text-center">
-                      {meta.name}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          {/* Icon grid */}
+          <div className="flex-1 min-h-0 p-2">
+            {results.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-zinc-400 dark:text-zinc-600">
+                <Search size={24} className="mb-2 opacity-30" />
+                <p className="text-xs">No icons found</p>
+              </div>
+            ) : (
+              <AutoSizer>
+                {({ height, width }: { height: number; width: number }) => {
+                  const COLUMN_COUNT = 3;
+                  const ROW_HEIGHT = 68;
+                  const rowCount = Math.ceil(results.length / COLUMN_COUNT);
+                  const itemData = { results, loadedIcons, addIconElement, COLUMN_COUNT };
+
+                  return (
+                    <List
+                      height={height}
+                      itemCount={rowCount}
+                      itemSize={ROW_HEIGHT}
+                      width={width}
+                      itemData={itemData}
+                      className="custom-scrollbar"
+                    >
+                      {IconRow}
+                    </List>
+                  );
+                }}
+              </AutoSizer>
+            )}
+          </div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </AnimatePresence>
   );
 }

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useDragControls } from 'framer-motion';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
 import { useCanvasStore } from '@/store/canvas-store';
 import { useUIStore } from '@/store/ui-store';
 import { ColorPicker, PRESET_COLORS } from './ColorPicker';
@@ -22,16 +22,17 @@ import {
   Star,
   Hexagon,
   Diamond,
+  Pentagon,
+  Ellipse as EllipseIcon,
   Undo2,
   Redo2,
   GripHorizontal,
-  LayoutList,
-  LayoutDashboard,
   X,
   Plus,
   Highlighter,
   Lasso,
   StickyNote,
+  RotateCcw,
 } from 'lucide-react';
 import { ShapeType } from '@/types';
 
@@ -378,9 +379,11 @@ function QuickColors({
 ───────────────────────────────────────────────────────── */
 const SHAPE_TOOLS = [
   { id: ShapeType.RECTANGLE, icon: Square, label: 'Rectangle (R)' },
-  { id: ShapeType.CIRCLE, icon: Circle, label: 'Ellipse (O)' },
+  { id: ShapeType.CIRCLE, icon: Circle, label: 'Circle (O)' },
+  { id: ShapeType.ELLIPSE, icon: EllipseIcon, label: 'Ellipse' },
   { id: ShapeType.TRIANGLE, icon: Triangle, label: 'Triangle' },
   { id: ShapeType.DIAMOND, icon: Diamond, label: 'Diamond' },
+  { id: ShapeType.PENTAGON, icon: Pentagon, label: 'Pentagon' },
   { id: ShapeType.STAR, icon: Star, label: 'Star' },
   { id: ShapeType.HEXAGON, icon: Hexagon, label: 'Hexagon' },
 ] as const;
@@ -436,7 +439,7 @@ function ShapePicker({
           onPick(activeShape.id);
           setOpen((v) => !v);
         }}
-        className={`p-1.5 rounded transition-colors relative shrink-0 flex items-center justify-center ${
+        className={`p-2 rounded transition-colors relative shrink-0 flex items-center justify-center ${
           isActive ? 'bg-foreground text-background' : 'text-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800'
         }`}
         title="Shapes"
@@ -459,7 +462,7 @@ function ShapePicker({
                 key={s.id}
                 onClick={() => { onPick(s.id); setOpen(false); }}
                 title={s.label}
-                className={`p-1.5 rounded transition-colors ${
+                className={`p-2 rounded transition-colors ${
                   activeShape.id === s.id
                     ? 'bg-foreground text-background'
                     : 'text-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800'
@@ -500,32 +503,37 @@ export function AdvancedToolbar() {
   const currentStyle = useUIStore((state) => state.currentStyle);
   const penType = currentStyle.penType || 'pen';
   const updateCurrentStyle = useUIStore((state) => state.updateCurrentStyle);
+  const toolbarDock = useUIStore((s) => s.toolbarDock);
+  const setToolbarDock = useUIStore((s) => s.setToolbarDock);
 
-  // null = follow the viewport; set once the user picks an orientation by hand.
-  const [orientationOverride, setOrientationOverride] = useState<'vertical' | 'horizontal' | null>(null);
-  const [autoOrientation, setAutoOrientation] = useState<'vertical' | 'horizontal'>('vertical');
   const [lastShape, setLastShape] = useState<ShapeType>(ShapeType.RECTANGLE);
   const dragControls = useDragControls();
+  const toolbarRef = useRef<HTMLDivElement>(null);
 
-  // A column of tools does not fit on a phone, or on a tablet held in
-  // landscape: below these sizes the bar lies down along the bottom instead.
-  useEffect(() => {
-    const pick = () => {
-      const tooNarrow = window.innerWidth < 640;
-      const tooShort = window.innerHeight < 720;
-      setAutoOrientation(tooNarrow || tooShort ? 'horizontal' : 'vertical');
-    };
-    pick();
-    window.addEventListener('resize', pick);
-    window.addEventListener('orientationchange', pick);
-    return () => {
-      window.removeEventListener('resize', pick);
-      window.removeEventListener('orientationchange', pick);
-    };
-  }, []);
+  // Cycle order: left → top → right → bottom → left
+  const DOCK_CYCLE: Array<'left' | 'top' | 'right' | 'bottom'> = ['left', 'top', 'right', 'bottom'];
+  const cycleDock = useCallback(() => {
+    const idx = DOCK_CYCLE.indexOf(toolbarDock);
+    setToolbarDock(DOCK_CYCLE[(idx + 1) % DOCK_CYCLE.length]!);
+  }, [toolbarDock, setToolbarDock]);
 
-  const orientation = orientationOverride ?? autoOrientation;
-  const setOrientation = setOrientationOverride;
+  // On drag end, snap to the nearest edge
+  const handleDragEnd = useCallback((_e: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    const { x, y } = info.point;
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const dLeft = x;
+    const dRight = W - x;
+    const dTop = y;
+    const dBottom = H - y;
+    const min = Math.min(dLeft, dRight, dTop, dBottom);
+    if (min === dLeft) setToolbarDock('left');
+    else if (min === dRight) setToolbarDock('right');
+    else if (min === dTop) setToolbarDock('top');
+    else setToolbarDock('bottom');
+  }, [setToolbarDock]);
+
+  const orientation = toolbarDock === 'left' || toolbarDock === 'right' ? 'vertical' : 'horizontal';
 
   // Which tool panel is open
   const [openPanel, setOpenPanel] = useState<'pen' | 'eraser' | 'lasso' | null>(null);
@@ -603,8 +611,8 @@ export function AdvancedToolbar() {
   const renderToolButton = (t: { id: string; icon: React.ElementType; label: string } | null, i: number) => {
     if (!t) {
       return isVertical
-        ? <div key={i} className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-0.5 shrink-0" />
-        : <div key={i} className="h-5 w-px bg-zinc-200 dark:bg-zinc-800 mx-0.5 shrink-0" />;
+        ? <div key={i} className="w-[1px] h-4 bg-zinc-200 dark:bg-zinc-800 mx-auto my-0.5 shrink-0" />
+        : <div key={i} className="h-4 w-[1px] bg-zinc-200 dark:bg-zinc-800 mx-1 shrink-0" />;
     }
 
     if (t.id === 'shapes') {
@@ -657,7 +665,7 @@ export function AdvancedToolbar() {
       <button
         key={t.id}
         onClick={handleClick}
-        className={`p-1.5 rounded transition-colors relative group shrink-0 flex items-center justify-center ${
+        className={`p-2 rounded transition-colors relative group shrink-0 flex items-center justify-center ${
           isActive ? 'bg-foreground text-background' : 'text-foreground hover:bg-zinc-100 dark:hover:bg-zinc-800'
         }`}
         title={t.label}
@@ -721,170 +729,156 @@ export function AdvancedToolbar() {
     </AnimatePresence>
   );
 
-  /* ── Vertical layout ──────────────────────────────────────── */
-  if (isVertical) {
-    return (
-      <>
-        <motion.div
-          key="vertical-toolbar"
-          drag
-          dragControls={dragControls}
-          dragListener={false}
-          dragMomentum={false}
-          className="fixed left-3 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-lg p-1 flex flex-col gap-0.5 z-50 pointer-events-auto outline-none overflow-y-auto no-scrollbar"
-          style={{
-            width: '46px',
-            // Vertically centred via auto margins rather than a translate:
-            // framer-motion drives dragging through `transform`, so a
-            // translateY(-50%) here would be wiped out on the first drag and
-            // the bar would jump by half its height.
-            top: 0,
-            bottom: 0,
-            marginTop: 'auto',
-            marginBottom: 'auto',
-            height: 'max-content',
-            maxHeight: 'calc(var(--app-height, 100vh) - 140px)',
-          }}
-        >
-          {/* Header: drag grip and orientation toggle share one row */}
-          <div className="flex items-center justify-between px-0.5 shrink-0">
-            <div
-              className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-grab active:cursor-grabbing"
-              onPointerDown={(e) => dragControls.start(e)}
-              title="Drag toolbar"
-            >
-              <GripHorizontal size={12} />
-            </div>
-            <button
-              onClick={() => setOrientation('horizontal')}
-              className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-400 dark:text-zinc-500"
-              title="Switch to horizontal toolbar"
-            >
-              <LayoutDashboard size={12} />
-            </button>
-          </div>
+  /* ── Dock-position styles ─────────────────────────────────── */
+  // Compute the fixed-position style for each dock position.
+  // Left/Right → vertical bar; Top/Bottom → horizontal bar.
+  const dockStyle: React.CSSProperties = (() => {
+    switch (toolbarDock) {
+      case 'left':
+        return {
+          left: '12px',
+          top: 0,
+          bottom: 0,
+          marginTop: 'auto',
+          marginBottom: 'auto',
+          height: 'max-content',
+          maxHeight: 'calc(var(--app-height, 100vh) - 140px)',
+          width: '46px',
+        };
+      case 'right':
+        return {
+          right: '12px',
+          top: 0,
+          bottom: 0,
+          marginTop: 'auto',
+          marginBottom: 'auto',
+          height: 'max-content',
+          maxHeight: 'calc(var(--app-height, 100vh) - 140px)',
+          width: '46px',
+        };
+      case 'top':
+        return {
+          top: '12px',
+          left: 0,
+          right: 0,
+          marginLeft: 'auto',
+          marginRight: 'auto',
+          width: 'max-content',
+          maxWidth: 'calc(100vw - 16px)',
+        };
+      case 'bottom':
+      default:
+        return {
+          bottom: 'calc(72px + env(safe-area-inset-bottom, 0px))',
+          left: 0,
+          right: 0,
+          marginLeft: 'auto',
+          marginRight: 'auto',
+          width: 'max-content',
+          maxWidth: 'calc(100vw - 16px)',
+        };
+    }
+  })();
 
-          {/* All other content stops propagation so clicks don't trigger drag */}
-          <div onPointerDown={(e) => e.stopPropagation()} className="flex flex-col gap-0.5">
-            {/* Undo/Redo, side by side to save a row */}
-            <div className="flex items-center justify-center gap-0.5 shrink-0">
-              <button
-                onClick={() => canUndo && undo()}
-                className={`p-1 rounded transition-colors ${canUndo ? 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800' : 'text-zinc-300 dark:text-zinc-700 cursor-not-allowed'}`}
-                title="Undo (Ctrl+Z)"
-                disabled={!canUndo}
-              >
-                <Undo2 size={15} />
-              </button>
-              <button
-                onClick={() => canRedo && redo()}
-                className={`p-1 rounded transition-colors ${canRedo ? 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800' : 'text-zinc-300 dark:text-zinc-700 cursor-not-allowed'}`}
-                title="Redo (Ctrl+Y)"
-                disabled={!canRedo}
-              >
-                <Redo2 size={15} />
-              </button>
-            </div>
+  const isVert = isVertical;
 
-            <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-0.5 shrink-0" />
+  /* ── Shared inner content ─────────────────────────────────── */
+  const headerControls = (
+    <div
+      className={`flex shrink-0 ${isVert ? 'flex-col items-center gap-0.5' : 'flex-row items-center gap-1'}`}
+    >
+      {/* Grip — initiates drag */}
+      <div
+        className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-grab active:cursor-grabbing shrink-0"
+        onPointerDown={(e) => dragControls.start(e)}
+        title="Drag toolbar"
+      >
+        <GripHorizontal size={12} />
+      </div>
+      {/* Cycle dock position */}
+      <button
+        onClick={cycleDock}
+        className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-400 dark:text-zinc-500 shrink-0"
+        title="Cycle toolbar position (Left → Top → Right → Bottom)"
+      >
+        <RotateCcw size={12} />
+      </button>
+    </div>
+  );
 
-            {/* Tools */}
-            <div className="flex flex-col gap-0.5">
-              {tools.map((t, i) => renderToolButton(t, i))}
-            </div>
+  const divider = isVert
+    ? <div className="w-[1px] h-4 bg-zinc-200 dark:bg-zinc-800 mx-auto my-1 shrink-0" />
+    : <div className="h-4 w-[1px] bg-zinc-200 dark:bg-zinc-800 mx-1 shrink-0" />;
 
-            {/* Global Color */}
-            <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-0.5 shrink-0" />
-            <div className="flex flex-col items-center pb-0.5 shrink-0">
-              <ColorPicker
-                color={currentStyle.stroke}
-                onChange={handleColorChange}
-                position="right"
-                size="lg"
-              />
-            </div>
-          </div>
-        </motion.div>
+  const undoRedo = (
+    <div className={`flex shrink-0 ${isVert ? 'flex-col gap-0.5' : 'flex-row gap-0.5 items-center'}`}>
+      <button
+        onClick={() => canUndo && undo()}
+        className={`p-2 rounded transition-colors shrink-0 ${canUndo ? 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800' : 'text-zinc-300 dark:text-zinc-700 cursor-not-allowed'}`}
+        title="Undo (Ctrl+Z)"
+        disabled={!canUndo}
+      >
+        <Undo2 size={16} />
+      </button>
+      <button
+        onClick={() => canRedo && redo()}
+        className={`p-2 rounded transition-colors shrink-0 ${canRedo ? 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800' : 'text-zinc-300 dark:text-zinc-700 cursor-not-allowed'}`}
+        title="Redo (Ctrl+Y)"
+        disabled={!canRedo}
+      >
+        <Redo2 size={16} />
+      </button>
+    </div>
+  );
 
-        {/* Tool settings panels — always fixed top-right */}
-        {typeof window !== 'undefined' && createPortal(panels, document.body)}
-      </>
-    );
-  }
+  const toolList = (
+    <div className={`flex shrink-0 ${isVert ? 'flex-col gap-1' : 'flex-row gap-1 items-center'}`}>
+      {tools.map((t, i) => renderToolButton(t, i))}
+    </div>
+  );
 
-  /* ── Horizontal layout ────────────────────────────────────── */
+  const colorPickerEl = (
+    <div className={`flex shrink-0 ${isVert ? 'flex-col items-center pb-0.5' : 'flex-row items-center px-0.5'}`}>
+      <ColorPicker
+        color={currentStyle.stroke}
+        onChange={handleColorChange}
+        position={toolbarDock === 'right' ? 'left' : toolbarDock === 'top' ? 'bottom' : 'right'}
+        size="lg"
+      />
+    </div>
+  );
+
   return (
     <>
       <motion.div
-        key="horizontal-toolbar"
+        ref={toolbarRef}
+        key="toolbar"
         drag
         dragControls={dragControls}
         dragListener={false}
         dragMomentum={false}
-        className="fixed left-0 right-0 mx-auto bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-lg px-1.5 py-1 flex flex-row items-center gap-0.5 z-50 pointer-events-auto outline-none max-w-[calc(100vw-16px)] overflow-x-auto no-scrollbar"
-        // Sits above the status bar and clear of the home indicator. The status
-        // bar is ~44px tall, so 72px keeps a gap on a phone without floating in
-        // the middle of the canvas.
-        style={{ width: 'max-content', bottom: 'calc(72px + env(safe-area-inset-bottom, 0px))' }}
+        onDragEnd={handleDragEnd}
+        className={`fixed bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-lg z-50 pointer-events-auto outline-none ${
+          isVert
+            ? 'p-1 flex flex-col gap-1 overflow-y-auto no-scrollbar'
+            : 'px-1.5 py-1 flex flex-row items-center gap-1 overflow-x-auto no-scrollbar'
+        }`}
+        style={dockStyle}
       >
-        {/* Drag handle — only this initiates drag */}
+        {/* Header: grip + cycle button */}
+        {headerControls}
+
+        {/* All interactive content — stops propagation so clicks don't trigger drag */}
         <div
-          className="flex items-center pr-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-grab active:cursor-grabbing shrink-0"
-          onPointerDown={(e) => dragControls.start(e)}
-          title="Drag toolbar"
+          onPointerDown={(e) => e.stopPropagation()}
+          className={`flex shrink-0 ${isVert ? 'flex-col gap-1' : 'flex-row gap-1 items-center'}`}
         >
-          <GripHorizontal size={12} />
-        </div>
-
-        {/* All other content stops propagation so clicks don't trigger drag */}
-        <div className="flex flex-row items-center gap-0.5" onPointerDown={(e) => e.stopPropagation()}>
-          {/* Orientation toggle */}
-          <button
-            onClick={() => setOrientation('vertical')}
-            className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-400 dark:text-zinc-500 shrink-0"
-            title="Switch to vertical toolbar"
-          >
-            <LayoutList size={12} />
-          </button>
-
-          <div className="h-5 w-px bg-zinc-200 dark:bg-zinc-800 mx-0.5 shrink-0" />
-
-          {/* Undo/Redo */}
-          <button
-            onClick={() => canUndo && undo()}
-            className={`p-1.5 rounded transition-colors shrink-0 ${canUndo ? 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800' : 'text-zinc-300 dark:text-zinc-700 cursor-not-allowed'}`}
-            title="Undo (Ctrl+Z)"
-            disabled={!canUndo}
-          >
-            <Undo2 size={16} />
-          </button>
-          <button
-            onClick={() => canRedo && redo()}
-            className={`p-1.5 rounded transition-colors shrink-0 ${canRedo ? 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800' : 'text-zinc-300 dark:text-zinc-700 cursor-not-allowed'}`}
-            title="Redo (Ctrl+Y)"
-            disabled={!canRedo}
-          >
-            <Redo2 size={16} />
-          </button>
-
-          <div className="h-5 w-px bg-zinc-200 dark:bg-zinc-800 mx-0.5 shrink-0" />
-
-          {/* Tools */}
-          <div className="flex flex-row items-center gap-0.5">
-            {tools.map((t, i) => renderToolButton(t, i))}
-          </div>
-
-          <div className="h-5 w-px bg-zinc-200 dark:bg-zinc-800 mx-0.5 shrink-0" />
-
-          {/* Global Color */}
-          <div className="flex items-center px-0.5 shrink-0">
-            <ColorPicker
-              color={currentStyle.stroke}
-              onChange={handleColorChange}
-              position="top"
-              size="lg"
-            />
-          </div>
+          {divider}
+          {undoRedo}
+          {divider}
+          {toolList}
+          {divider}
+          {colorPickerEl}
         </div>
       </motion.div>
 

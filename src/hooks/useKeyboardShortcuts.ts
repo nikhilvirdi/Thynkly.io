@@ -18,7 +18,6 @@ export function useKeyboardShortcuts() {
   const canUndo = useCanvasStore(state => state.canUndo);
   const canRedo = useCanvasStore(state => state.canRedo);
   const copy = useCanvasStore(state => state.copy);
-  const paste = useCanvasStore(state => state.paste);
   const duplicate = useCanvasStore(state => state.duplicate);
   const updateElement = useCanvasStore(state => state.updateElement);
   const bringToFront = useCanvasStore(state => state.bringToFront);
@@ -26,6 +25,7 @@ export function useKeyboardShortcuts() {
   const viewport = useCanvasStore(state => state.viewport);
   const setZoom = useCanvasStore(state => state.setZoom);
   const zoomToFit = useCanvasStore(state => state.zoomToFit);
+  const zoomToSelection = useCanvasStore(state => state.zoomToSelection);
   const groupSelected = useCanvasStore(state => state.groupSelected);
   const ungroupSelected = useCanvasStore(state => state.ungroupSelected);
   const toggleLockSelected = useCanvasStore(state => state.toggleLockSelected);
@@ -162,6 +162,10 @@ export function useKeyboardShortcuts() {
           case '!':
             e.preventDefault(); zoomToFit();
             return;
+          case '2':
+          case '@':
+            e.preventDefault(); zoomToSelection();
+            return;
         }
       }
 
@@ -203,10 +207,7 @@ export function useKeyboardShortcuts() {
               deleteElements(Array.from(selectedIds));
             }
             break;
-          case 'v':
-            e.preventDefault();
-            paste();
-            break;
+
           case 'd':
             e.preventDefault();
             if (selectedIds.size > 0) duplicate();

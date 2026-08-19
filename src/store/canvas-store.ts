@@ -61,7 +61,7 @@ interface CanvasState {
   updateViewport: (viewport: Partial<Viewport>) => void;
 
   setIconPickerOpen: (open: boolean) => void;
-  addIconElement: (iconName: string, iconLibrary: 'lucide' | 'tabler') => void;
+  addIconElement: (iconName: string, iconLibrary: 'material-symbols') => void;
   updateIconElement: (id: string, patch: Partial<IconElement>) => void;
 
   // Undo/redo
@@ -108,6 +108,7 @@ interface CanvasState {
 
   // Zoom helpers
   zoomToFit: () => void;
+  zoomToSelection: () => void;
   setZoom: (zoom: number) => void;
   scrollToContent: () => void;
 
@@ -218,6 +219,44 @@ const pushHistory = (state: {
   state.historyIndex = newHistory.length - 1;
 };
 
+const fitToElements = (
+  state: { elements: Record<string, WhiteboardElement>; viewport: Viewport },
+  targetIds: string[]
+) => {
+  const els = targetIds.map(id => state.elements[id]).filter(Boolean) as WhiteboardElement[];
+
+  if (els.length === 0) {
+    state.viewport = { ...state.viewport, zoom: 1, x: 0, y: 0 };
+    return;
+  }
+
+  const minX = Math.min(...els.map(e => e.x));
+  const minY = Math.min(...els.map(e => e.y));
+  const maxX = Math.max(...els.map(e => e.x + e.width));
+  const maxY = Math.max(...els.map(e => e.y + e.height));
+
+  const padding = 80;
+  const vw = state.viewport.width || window.innerWidth;
+  const vh = state.viewport.height || window.innerHeight;
+
+  const contentW = Math.max(maxX - minX, 1);
+  const contentH = Math.max(maxY - minY, 1);
+
+  const scaleX = (vw - padding * 2) / contentW;
+  const scaleY = (vh - padding * 2) / contentH;
+  const zoom = Math.min(scaleX, scaleY, 3);
+
+  const scaledW = contentW * zoom;
+  const scaledH = contentH * zoom;
+
+  state.viewport = {
+    ...state.viewport,
+    zoom,
+    x: -minX * zoom + (vw - scaledW) / 2,
+    y: -minY * zoom + (vh - scaledH) / 2,
+  };
+};
+
 export const useCanvasStore = create<CanvasState>()(
   persist(
     immer((set, get) => ({
@@ -320,8 +359,8 @@ export const useCanvasStore = create<CanvasState>()(
       const currentStyle = (useUIStore as { getState?: () => { currentStyle: { stroke: string; strokeWidth: number } } }).getState?.()?.currentStyle || { stroke: '#e2e8f0', strokeWidth: 2 };
       
       // Place at center of current viewport in world coordinates
-      const worldX = (-viewport.x + window.innerWidth / 2) / viewport.zoom - 24;
-      const worldY = (-viewport.y + window.innerHeight / 2) / viewport.zoom - 24;
+      const worldX = (-viewport.x + window.innerWidth / 2) / viewport.zoom - 32;
+      const worldY = (-viewport.y + window.innerHeight / 2) / viewport.zoom - 32;
       
       const zIndices = Object.values(get().elements).map(e => e.zIndex);
       const maxZIndex = zIndices.length > 0 ? Math.max(...zIndices) : 0;
@@ -331,8 +370,8 @@ export const useCanvasStore = create<CanvasState>()(
         type: ShapeType.ICON,
         x: worldX,
         y: worldY,
-        width: 48,
-        height: 48,
+        width: 64,
+        height: 64,
         rotation: 0,
         locked: false,
         zIndex: maxZIndex + 1,
@@ -547,8 +586,17 @@ export const useCanvasStore = create<CanvasState>()(
     deleteElements: (ids) => set((state) => {
       pushHistory(state);
 
-      // A label has no life of its own — deleting the shape deletes its text.
       const doomed = new Set(ids);
+      
+      // A connector bound to a deleted shape is deleted with it
+      ids.forEach(id => {
+        const connectedIds = state.connectorsByElement.get(id);
+        if (connectedIds) {
+          connectedIds.forEach(connId => doomed.add(connId));
+        }
+      });
+
+      // A label has no life of its own — deleting the shape deletes its text.
       Object.values(state.elements).forEach((el) => {
         if (el.type === ShapeType.TEXT) {
           const containerId = (el as TextElement).containerId;
@@ -558,8 +606,6 @@ export const useCanvasStore = create<CanvasState>()(
       ids = Array.from(doomed);
 
       ids.forEach(id => {
-        // Also call detachConnectorsFromElement
-        get().detachConnectorsFromElement(id);
         
         const el = state.elements[id];
         if (el?.type === ShapeType.CONNECTOR) {
@@ -580,8 +626,18 @@ export const useCanvasStore = create<CanvasState>()(
     // Delete + add elements without touching undo history.
     // Used by the eraser during a drag gesture (snapshot is saved once at pointerdown).
     batchErase: (deleteIds, addElements) => set((state) => {
+      const doomed = new Set(deleteIds);
+      
       deleteIds.forEach(id => {
-        get().detachConnectorsFromElement(id);
+        const connectedIds = state.connectorsByElement.get(id);
+        if (connectedIds) {
+          connectedIds.forEach(connId => doomed.add(connId));
+        }
+      });
+      
+      const finalDeleteIds = Array.from(doomed);
+
+      finalDeleteIds.forEach(id => {
         
         const el = state.elements[id];
         if (el?.type === ShapeType.CONNECTOR) {
@@ -1088,42 +1144,15 @@ export const useCanvasStore = create<CanvasState>()(
     }),
 
     zoomToFit: () => set((state) => {
-      // Zoom to selected elements if any, otherwise all elements
-      const targetIds = state.selectedIds.size > 0 ? Array.from(state.selectedIds) : Object.keys(state.elements);
-      const els = targetIds.map(id => state.elements[id]).filter(Boolean) as WhiteboardElement[];
-      
-      if (els.length === 0) {
-        state.viewport = { ...state.viewport, zoom: 1, x: 0, y: 0 };
-        return;
-      }
-      
-      const minX = Math.min(...els.map(e => e.x));
-      const minY = Math.min(...els.map(e => e.y));
-      const maxX = Math.max(...els.map(e => e.x + e.width));
-      const maxY = Math.max(...els.map(e => e.y + e.height));
-      
-      const padding = 80;
-      const vw = state.viewport.width || window.innerWidth;
-      const vh = state.viewport.height || window.innerHeight;
-      
-      // Prevent division by zero
-      const contentW = Math.max(maxX - minX, 1);
-      const contentH = Math.max(maxY - minY, 1);
+      // Always fits the entire board, ignoring selection
+      const targetIds = Object.keys(state.elements);
+      fitToElements(state, targetIds);
+    }),
 
-      const scaleX = (vw - padding * 2) / contentW;
-      const scaleY = (vh - padding * 2) / contentH;
-      const zoom = Math.min(scaleX, scaleY, 3); // Max 3x zoom
-      
-      // Perfectly center the scaled content in the viewport
-      const scaledW = contentW * zoom;
-      const scaledH = contentH * zoom;
-      
-      state.viewport = {
-        ...state.viewport,
-        zoom,
-        x: -minX * zoom + (vw - scaledW) / 2,
-        y: -minY * zoom + (vh - scaledH) / 2,
-      };
+    zoomToSelection: () => set((state) => {
+      if (state.selectedIds.size === 0) return; // no-op, nothing selected
+      const targetIds = Array.from(state.selectedIds);
+      fitToElements(state, targetIds);
     }),
 
     loadScene: (loaded, background) => set((state) => {

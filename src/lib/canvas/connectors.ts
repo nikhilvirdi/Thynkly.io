@@ -86,6 +86,40 @@ export class ConnectorManager {
       if (el.id === excludeElementId) continue;
       if (el.type === ShapeType.CONNECTOR) continue;
 
+      // For circles and ellipses, project onto the actual perimeter rather
+      // than treating the element as a rectangle.
+      if (el.type === ShapeType.CIRCLE || el.type === ShapeType.ELLIPSE) {
+        const cx = el.x + el.width / 2;
+        const cy = el.y + el.height / 2;
+        const rx = el.width / 2;
+        const ry = el.height / 2;
+        const dx = pointerX - cx;
+        const dy = pointerY - cy;
+        // Normalize to unit circle space, then scale back to get perimeter point
+        const nx = dx / (rx || 1);
+        const ny = dy / (ry || 1);
+        const norm = Math.sqrt(nx * nx + ny * ny);
+        // Perimeter point in the direction of (dx, dy)
+        const perimX = cx + (norm === 0 ? 0 : (dx / norm) * rx);
+        const perimY = cy + (norm === 0 ? ry : (dy / norm) * ry);
+        const distToPerim = Math.hypot(pointerX - perimX, pointerY - perimY);
+        if (distToPerim <= hoverRadius) {
+          // Determine the canonical anchor face by angle for the anchorPoint label
+          const a = Math.atan2(dy * rx, dx * ry); // angle in ellipse space
+          let anchorPoint: AnchorPoint;
+          if (a >= -Math.PI / 4 && a < Math.PI / 4) anchorPoint = 'right';
+          else if (a >= Math.PI / 4 && a < 3 * Math.PI / 4) anchorPoint = 'bottom';
+          else if (a >= -3 * Math.PI / 4 && a < -Math.PI / 4) anchorPoint = 'top';
+          else anchorPoint = 'left';
+          const dist = distToPerim;
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestAnchor = { elementId: el.id, anchorPoint, position: { x: perimX, y: perimY } };
+          }
+        }
+        continue;
+      }
+
       const distToBorder = this.distanceToElementBorder(pointerX, pointerY, el);
       if (distToBorder <= hoverRadius) {
         // Find which anchor face is closest to compute the border hit point

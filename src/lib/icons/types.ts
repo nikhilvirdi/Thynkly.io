@@ -1,7 +1,8 @@
 export interface IconMeta {
-  name: string;          // PascalCase component name: 'Home', 'ArrowRight'
-  slug: string;          // kebab-case for search: 'home', 'arrow-right'
-  library: 'lucide' | 'tabler';
+  name: string;          // PascalCase component export name: 'Home', 'ArrowForward'
+  slug: string;          // kebab-case import-path segment: 'home', 'arrow-forward'
+  library: 'material-symbols';
   tags: string[];        // search keywords
   category: string;      // e.g. 'Arrows', 'UI', 'Files', 'Communication'
 }
+

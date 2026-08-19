@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Minus, Plus, Maximize, Grid3X3, Magnet, Crosshair } from 'lucide-react';
+import { Minus, Plus, Maximize, Focus, Grid3X3, Magnet, Crosshair } from 'lucide-react';
 import { useCanvasStore } from '@/store/canvas-store';
 import { useUIStore } from '@/store/ui-store';
 import { getElementBBox } from '@/lib/utils/geometry';
@@ -12,6 +12,7 @@ export function StatusBar() {
   const selectedIds = useCanvasStore(state => state.selectedIds);
   const setZoom = useCanvasStore(s => s.setZoom);
   const zoomToFit = useCanvasStore(s => s.zoomToFit);
+  const zoomToSelection = useCanvasStore(s => s.zoomToSelection);
   const scrollToContent = useCanvasStore(s => s.scrollToContent);
 
   // Excalidraw's "scroll back to content": only offered when you have actually
@@ -80,9 +81,18 @@ export function StatusBar() {
       <button
         onClick={zoomToFit}
         className="p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded text-zinc-500 dark:text-zinc-400 hover:text-foreground"
-        title="Zoom to Fit (Ctrl+1)"
+        title="Fit All (Shift+1)"
       >
         <Maximize size={14} />
+      </button>
+
+      <button
+        onClick={zoomToSelection}
+        disabled={selectedIds.size === 0}
+        className="p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded text-zinc-500 dark:text-zinc-400 hover:text-foreground disabled:opacity-30 disabled:pointer-events-none"
+        title="Fit Selection (Shift+2)"
+      >
+        <Focus size={14} />
       </button>
 
       {isLost && (

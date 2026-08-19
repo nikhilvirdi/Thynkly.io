@@ -119,6 +119,17 @@ export const getElementBBox = (el: WhiteboardElement): BoundingBox => {
     const minY = Math.min(conn.startY, conn.endY);
     const maxY = Math.max(conn.startY, conn.endY);
     return { minX, minY, maxX, maxY };
+  } else if (el.type === ShapeType.CIRCLE || el.type === ShapeType.ELLIPSE) {
+    // roughjs strokes bleed outside the element bounds by strokeWidth/2.
+    // Expand the bbox to match the visual footprint so selection handles
+    // sit at the visible edge of the stroke, not inside it.
+    const pad = Math.max(1, ((el.style?.strokeWidth ?? 2) / 2));
+    return {
+      minX: el.x - pad,
+      minY: el.y - pad,
+      maxX: el.x + el.width + pad,
+      maxY: el.y + el.height + pad,
+    };
   } else {
     // For rotated shapes, calculate the envelope box
     if (el.rotation) {
