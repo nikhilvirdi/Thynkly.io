@@ -1,8 +1,12 @@
-﻿# Thynkly.io
+﻿## Thynkly.io
+
+<img width="1256" height="287" alt="image" src="https://github.com/user-attachments/assets/64a22a1f-f788-4290-ba75-1e26c22c519a" />
+
+
 
 A hand-drawn-style whiteboard and diagramming tool for the browser — sketch, diagram, and take notes on any device, with full pen and stylus support (Apple Pencil, S-Pen, Wacom, Windows Ink) alongside mouse and touch.
 
-## Features
+### Features
 
 - Shapes: rectangle, circle, ellipse, triangle, diamond, pentagon, hexagon, star, line, arrow
 - Freehand drawing with pressure sensitivity, taper, and per-device stroke smoothing
@@ -19,7 +23,7 @@ A hand-drawn-style whiteboard and diagramming tool for the browser — sketch, d
 - Light and dark theme
 - Full stylus/pen support with palm rejection across pen and touch modes
 
-## Stack
+### Stack
 
 | Layer | Technology |
 |---|---|
